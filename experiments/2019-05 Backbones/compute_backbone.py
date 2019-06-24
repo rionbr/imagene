@@ -21,18 +21,19 @@ if __name__ == '__main__':
     #
     # Init variables
     #
-    input = 'correlation' # possiblilities
+    # uinput = 'correlation'  # correlation, powerlaw, tom
+    uinput = input("Which file to load [correlation,powerlaw,tom]:")
 
     # Paths
     data_path = '../../data/'
     result_path = 'results/'
 
     # Which file are we computing the backbone
-    if input == 'correlation':
-        file = '1-CorrMatfile'
-    elif input == 'powerlaw':
+    if uinput == 'correlation':
+        file = '1-updatedCorrMatfile'
+    elif uinput == 'powerlaw':
         file = '2-powerlawmat'
-    elif input == 'tom':
+    elif uinput == 'tom':
         file = '3-TOMfile'
     else:
         raise Exception('Input matrix must be either "correlation", "powerlaw", or "tom".')
@@ -41,6 +42,7 @@ if __name__ == '__main__':
     gpickle_extension = '.gpickle'
 
     # Read/Write file names
+    print("Loading file: '{:s}'.".format(file + csv_extension))
     rCSVFile = data_path + file + csv_extension
     wGPickleFile = result_path + file + '-backbone' + gpickle_extension
     wCSVFile = result_path + file + '-backbone' + csv_extension
@@ -50,6 +52,15 @@ if __name__ == '__main__':
 
     # Debug
     # df = df.iloc[:5, :5].copy()
+    n_nodes = df.shape[0]
+
+    # Rename Nodes (node names must start from 0)
+    index_bkp = df.index
+    columns_bkp = df.columns
+    df.index = range(0, n_nodes)
+    df.columns = range(0, n_nodes)
+
+
 
     df.columns = df.index
     nodelist = df.index.values
@@ -64,14 +75,11 @@ if __name__ == '__main__':
 
     # Converts (P)roximity to (D)istance using a map.
     D_dict = dict(zip(G.edges(), map(prox2dist, P)))
-
     # Set the distance value for each edge
     nx.set_edge_attributes(G, name='distance', values=D_dict)
-
     # Compute closure (Using the Dijkstra Class directly)
     print('--- Computing Dijkstra APSP ---')
     dij = Dijkstra.from_edgelist(D_dict, directed=False, verbose=10)
-
     # Serial Computation
     poolresults = list(range(len(dij.N)))
     for node in dij.N:
@@ -80,7 +88,7 @@ if __name__ == '__main__':
         poolresults[node] = _cy_single_source_shortest_distances(node, dij.N, dij.E, dij.neighbours, ('min', 'sum'), verbose=10)
     shortest_distances, local_paths = map(list, zip(*poolresults))
     dij.shortest_distances = dict(zip(dij.N, shortest_distances))
-    # Shortest Distances
+    # (S)hortest (D)istances
     SD = dij.get_shortest_distances(format='dict', translate=True)
     print('> Done.')
 
@@ -92,7 +100,7 @@ if __name__ == '__main__':
     edges_seen = set()
     for (i, j), cm in Cm.items():
         # Knowledge Network is undirected. Small ids come first.
-        if (i,j) in edges_seen or (i == j):
+        if (i, j) in edges_seen or (i == j):
             continue
         else:
             edges_seen.add((i, j))
@@ -137,7 +145,6 @@ if __name__ == '__main__':
     }
     nx.set_edge_attributes(G, name='b_ji_value', values=B_ji)
 
-
     print('--- Saving files ---')
 
     # Save Graph Object
@@ -145,9 +152,12 @@ if __name__ == '__main__':
 
     # Only extract the metric backbone
     Bm = G.copy()
-    Bm.remove_edges_from([(i, j) for i, j, d in Bm.edges(data=True) if d.get('metric_backbone') is not None])
+    Bm.remove_edges_from([(i, j) for i, j, d in Bm.edges(data=True) if d.get('metric_backbone') is False])
+    
     # Save Adjacency Object
     dfB = nx.to_pandas_adjacency(Bm, nodelist=nodelist, weight='weight', nonedge=np.nan)
+    dfB.index = index_bkp
+    dfB.columns = columns_bkp
     dfB.to_csv(wCSVFile)
 
     print("done.")
